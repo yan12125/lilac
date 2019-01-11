@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import traceback
@@ -27,7 +28,7 @@ from nicelogger import enable_pretty_logging
 
 from lilac2.packages import (
   DependencyManager, get_dependency_map, get_changed_packages,
-  Dependency,
+  Dependency, pacman_data,
 )
 from lilac2.cmd import (
   run_cmd, git_pull, git_push, pkgrel_changed, git_reset_hard,
@@ -96,7 +97,7 @@ def setup_build_logger() -> None:
     logger_factory = logger_factory,
   )
 
-def build_package(logdir: Path, package: str, mod: LilacMod) -> bool:
+def build_package(logdir: Path, package: str, mod: LilacMod, target: str) -> bool:
   logger.info('building %s', package)
   logfile = logdir / f'{package}.log'
   start_time = time.time()
@@ -114,7 +115,7 @@ def build_package(logdir: Path, package: str, mod: LilacMod) -> bool:
           redirect_output(f.fileno()), \
           execution_timeout(time_limit_hours * 3600):
         lilac_build(
-          mod, REPO,
+          mod, REPO, target=target,
           update_info = update_info,
           depends = DEPENDS.get(package, ()),
           bindmounts = BIND_MOUNTS,
@@ -197,13 +198,21 @@ def git_last_commit() -> str:
   cmd = ['git', 'log', '-1', '--format=%H']
   return run_cmd(cmd).strip()
 
-def start_build(repo: Repo, failed: Set[str], built: Set[str]) -> None:
+def start_build(repo: Repo, failed: Set[str], built: Set[str], target: str) -> None:
   # built is used to collect built package names
   global DEPENDS
 
   building_depmap = {}
   for p in building_packages:
     building_depmap[p] = DEPMAP[p]
+
+  dbpath = mydir / 'pacmandb'
+  dbpath.mkdir(exist_ok=True)
+  pkgpath = mydir / 'pacman-cache'
+  pkgpath.mkdir(exist_ok=True)
+  pkgbuild.init_data(dbpath)
+  pacman_data['dbpath'] = dbpath
+  pacman_data['pkgpath'] = pkgpath
 
   dep_building_map: Dict[str, Set[str]] = {}
   nonexistent: Dict[str, List[Dependency]] = defaultdict(list)
@@ -244,10 +253,6 @@ def start_build(repo: Repo, failed: Set[str], built: Set[str]) -> None:
   # used to decide what to install when building
   DEPENDS = building_depmap
 
-  dbpath = mydir / 'pacmandb'
-  dbpath.mkdir(exist_ok=True)
-  pkgbuild.init_data(dbpath)
-
   try:
     logger.info('building these packages: %r', packages)
     for pkg in packages:
@@ -258,7 +263,7 @@ def start_build(repo: Repo, failed: Set[str], built: Set[str]) -> None:
       path = repo.repodir / pkg
       with at_dir(path):
         try:
-          if build_package(logdir, pkg, repo.mods[pkg]):
+          if build_package(logdir, pkg, repo.mods[pkg], target):
             built.add(pkg)
           else:
             failed.add(pkg)
@@ -301,7 +306,7 @@ def start_build(repo: Repo, failed: Set[str], built: Set[str]) -> None:
   except KeyboardInterrupt:
     logger.info('keyboard interrupted, bye~')
 
-def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str]) -> None:
+def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str], target: str) -> None:
   global DEPMAP
 
   failed_info = D.get('failed', {})
@@ -371,7 +376,7 @@ def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str]) -> None:
 
   try:
     build_logger.info('build start')
-    start_build(REPO, failed, update_succeeded)
+    start_build(REPO, failed, update_succeeded, target)
     D['last_commit'] = git_last_commit()
   finally:
     build_logger.info('build end')
@@ -398,11 +403,11 @@ def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str]) -> None:
     if config.getboolean('lilac', 'git_push'):
       git_push()
 
-def main(pkgs_to_build: List[str]) -> None:
+def main(pkgs_to_build: List[str], target: str) -> None:
   store = mydir / 'store'
   with PickledData(store, default={}) as D:
     try:
-      main_may_raise(D, pkgs_to_build)
+      main_may_raise(D, pkgs_to_build, target)
     except Exception:
       tb = traceback.format_exc()
       logger.exception('unexpected error')
@@ -437,6 +442,14 @@ if __name__ == '__main__':
   try:
     setup()
 
-    main(sys.argv[1:])
+    parser = argparse.ArgumentParser(prog=sys.argv[0])
+    parser.add_argument('--target', default='stable',
+                        choices=('stable', 'testing', 'kde-unstable'),
+                        help='Target repo')
+    parser.add_argument('packages', metavar='PKG', nargs='*',
+                        help='Packages to build')
+    args = parser.parse_args()
+
+    main(args.packages, args.target)
   except Exception:
     logger.exception('unexpected error')

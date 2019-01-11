@@ -5,7 +5,7 @@ import logging
 import subprocess
 from pathlib import Path
 from typing import (
-  Optional, Iterable, List, Set, TYPE_CHECKING,
+  Dict, Optional, Iterable, List, Set, TYPE_CHECKING,
 )
 from types import SimpleNamespace
 
@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+build_prefix_map: Dict[str, str] = {
+  'stable': 'extra-x86_64',
+  'testing': 'testing-x86_64',
+  'kde-unstable': 'kde-unstable-x86_64',
+}
+
 class MissingDependencies(Exception):
   def __init__(self, pkgs: Set[str]) -> None:
     self.deps = pkgs
@@ -35,6 +41,7 @@ def lilac_build(
   mod: LilacMod,
   repo: Optional['Repo'],
   build_prefix: Optional[str] = None,
+  target: str = 'stable',
   update_info: NvResults = NvResults(),
   accept_noupdate: bool = False,
   depends: Iterable[Dependency] = (),
@@ -72,6 +79,10 @@ def lilac_build(
     need_build_first = set()
     build_prefix = build_prefix or getattr(
       mod, 'build_prefix', 'extra-x86_64')
+    if build_prefix == build_prefix_map['stable']:
+      real_build_prefix = build_prefix_map[target]
+    else:
+      real_build_prefix = build_prefix
     depend_packages = []
 
     for x in depends:
@@ -101,7 +112,7 @@ def lilac_build(
         makepkg_args = mod.makepkg_args
 
     call_build_cmd(
-      build_prefix, depend_packages, bindmounts,
+      real_build_prefix, depend_packages, bindmounts,
       build_args, makechrootpkg_args, makepkg_args,
     )
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict, namedtuple
 from pathlib import Path
+import shutil
+import subprocess
 from typing import Dict, Union, Tuple, Set, Optional
 import re
 
@@ -42,6 +44,11 @@ def get_dependency_map(
 _DependencyTuple = namedtuple(
   '_DependencyTuple', 'pkgdir pkgname')
 
+pacman_data = {
+  'dbpath': None,
+  'pkgpath': None,
+}
+
 class Dependency(_DependencyTuple):
   def resolve(self) -> Optional[Path]:
     try:
@@ -53,11 +60,24 @@ class Dependency(_DependencyTuple):
     files = [x for x in self.pkgdir.iterdir()
              if x.name.endswith(('.pkg.tar.xz', '.pkg.tar.zst'))]
     pkgs = []
+
+    dbpath = pacman_data['dbpath']
+    pkgpath = pacman_data['pkgpath']
+    if not files:
+      try:
+        run_cmd(['fakeroot', 'pacman', '-Sw', '--noconfirm',
+                 '--dbpath', dbpath, '--cachedir', pkgpath, self.pkgname])
+      except subprocess.CalledProcessError:
+        pass
+      files = [x for x in pkgpath.iterdir()]
     for x in files:
       info = archpkg.PkgNameInfo.parseFilename(x.name)
       if info.name == self.pkgname:
         pkgs.append(x)
 
+    for pkg in pkgs:
+      if pkg.parent == pkgpath:
+        shutil.copy2(pkg, self.pkgdir)
     if len(pkgs) == 1:
       return pkgs[0]
     elif not pkgs:
