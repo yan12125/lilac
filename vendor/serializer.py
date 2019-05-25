@@ -1,6 +1,7 @@
 import os
 import abc
 
+import json
 import pickle
 
 from myutils import safe_overwrite
@@ -77,6 +78,14 @@ class PickledData(Serializer):
 
   def load(self):
     self.data = pickle.load(open(self.fname, 'rb'))
+
+class JsonData(Serializer):
+  def save(self):
+    data = json.dumps(self.data)
+    safe_overwrite(self.fname, data, mode='w')
+
+  def load(self):
+    self.data = json.load(open(self.fname, 'r'))
 
 class SerializerError(Exception): pass
 

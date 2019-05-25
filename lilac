@@ -19,7 +19,7 @@ sys.path.append(topdir)
 sys.path.append(topdir+'/vendor')
 
 from myutils import at_dir, execution_timeout, lock_file
-from serializer import PickledData
+from serializer import JsonData
 from nicelogger import enable_pretty_logging
 
 from lilac2 import lilacpy
@@ -400,8 +400,8 @@ def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str]) -> None:
       git_push()
 
 def main(pkgs_to_build: List[str]) -> None:
-  store = os.path.join(mydir, 'store')
-  with PickledData(store, default={}) as D:
+  store = os.path.join(mydir, 'store.json')
+  with JsonData(store, default={}) as D:
     try:
       main_may_raise(D, pkgs_to_build)
     except Exception:
