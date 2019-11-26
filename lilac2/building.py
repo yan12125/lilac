@@ -66,7 +66,6 @@ def lilac_build(
     if pre_build is not None:
       logger.debug('accept_noupdate=%r, oldver=%r, newver=%r', accept_noupdate, oldver, newver)
       pre_build()
-    pkgbuild.check_srcinfo()
     run_cmd(['recv_gpg_keys'])
 
     need_build_first = set()
@@ -111,6 +110,7 @@ def lilac_build(
     post_build = getattr(mod, 'post_build', None)
     if post_build is not None:
       post_build()
+    pkgbuild.check_srcinfo()
     success = True
   finally:
     post_build_always = getattr(mod, 'post_build_always', None)
