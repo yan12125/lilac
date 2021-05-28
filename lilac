@@ -321,11 +321,13 @@ def main_may_raise(D: Dict[str, Any], pkgs_to_build: List[str]) -> None:
 
   failed_info = D.get('failed', {})
 
-  if get_git_branch() != 'master':
-    raise Exception('repo not on master, aborting.')
+  if config['lilac'].get('managed_repo', True):
+    if get_git_branch() != 'master':
+      raise Exception('repo not on master, aborting.')
 
-  git_reset_hard()
-  git_pull_override()
+    git_reset_hard()
+    git_pull_override()
+
   failed = REPO.load_managed_lilac_and_report()
 
   depman = DependencyManager(REPO.repodir)
